@@ -44,7 +44,8 @@ macOS 默认的输入法切换有一个常见痛点：
 - [Package.swift](/Users/liumengdi/Developer/playground/Package.swift): Swift Package 定义
 - [main.swift](/Users/liumengdi/Developer/playground/Sources/ShiftKeyIMESwitch/main.swift): 主应用逻辑
 - [build-app.sh](/Users/liumengdi/Developer/playground/scripts/build-app.sh): 构建 `.app` 包
-- [install-local.sh](/Users/liumengdi/Developer/playground/scripts/install-local.sh): 安装到本地 `~/Applications`
+- [install-local.sh](/Users/liumengdi/Developer/playground/scripts/install-local.sh): 安装到当前 Mac
+- [install-current-mac.sh](/Users/liumengdi/Developer/playground/scripts/install-current-mac.sh): 当前 Mac 的一键安装入口
 - [list-input-sources.swift](/Users/liumengdi/Developer/playground/scripts/list-input-sources.swift): 打印系统输入源，方便调试
 
 ## 快速开始
@@ -74,13 +75,19 @@ bash scripts/build-app.sh release
 dist/Shift Input Switch.app
 ```
 
-安装到当前用户目录：
+安装到当前电脑：
 
 ```bash
-bash scripts/install-local.sh
+bash scripts/install-current-mac.sh
 ```
 
-默认安装位置：
+脚本会优先尝试标准安装路径：
+
+```bash
+/Applications/Shift Input Switch.app
+```
+
+如果当前终端进程没有写入 `/Applications` 的权限，就会回退到：
 
 ```bash
 ~/Applications/Shift Input Switch.app
@@ -91,8 +98,9 @@ bash scripts/install-local.sh
 最推荐的方式不是直接拿别人打好的 `.app`，而是：
 
 1. 在另一台 Mac 上克隆这个仓库
-2. 本地运行 `bash scripts/install-local.sh`
+2. 本地运行 `bash scripts/install-current-mac.sh`
 3. 打开应用并授权“输入监控”
+4. 在菜单中点一次“开启开机自动启动”
 
 这样有两个好处：
 
@@ -103,10 +111,11 @@ bash scripts/install-local.sh
 
 ## 首次使用
 
-首次启动后，请做这两件事：
+首次启动后，请做这三件事：
 
 1. 允许应用监听键盘事件
 2. 确认菜单里左 `Shift` 和右 `Shift` 分别绑定到了你想要的英文/中文输入源
+3. 如果希望登录后自动启动，在菜单里点“开启开机自动启动”
 
 需要的系统权限是：
 
@@ -124,6 +133,13 @@ bash scripts/install-local.sh
 
 - `未启用，可自动启用`：应用会尽量自动启用它
 - `未启用`：系统不一定允许程序自动启用，可能仍需手动到系统设置里开启
+
+关于开机自动启动：
+
+- `已开启`：登录后会自动启动
+- `未开启`：当前没有注册登录项
+- `等待系统批准`：通常要去“系统设置 -> 通用 -> 登录项”确认
+- `当前不可用`：说明你当前不是从标准 `.app` 安装运行，先执行安装脚本
 
 ## 触发规则
 
@@ -178,9 +194,7 @@ bash scripts/build-app.sh release
 
 ## 后续可以继续补的能力
 
-- 开机自启
 - 首启配置向导
 - 更好的冲突检测
 - 自定义提示音或屏幕提示
 - `.dmg` / 发布流程
-

@@ -3,6 +3,7 @@ import ApplicationServices
 import Carbon
 import CoreGraphics
 import Foundation
+import ServiceManagement
 
 private let tapThreshold: CFTimeInterval = 0.30
 
@@ -52,6 +53,72 @@ private struct InputSourceDescriptor: Hashable {
     let isEnabled: Bool
     let isEnableCapable: Bool
     let isSelectCapable: Bool
+}
+
+private final class LaunchAtLoginController {
+    enum State {
+        case enabled
+        case disabled
+        case requiresApproval
+        case unavailable
+
+        var title: String {
+            switch self {
+            case .enabled:
+                return "开机自动启动：已开启"
+            case .disabled:
+                return "开机自动启动：未开启"
+            case .requiresApproval:
+                return "开机自动启动：等待系统批准"
+            case .unavailable:
+                return "开机自动启动：当前不可用"
+            }
+        }
+
+        var actionTitle: String {
+            switch self {
+            case .enabled:
+                return "关闭开机自动启动"
+            case .disabled, .requiresApproval, .unavailable:
+                return "开启开机自动启动"
+            }
+        }
+
+        var hint: String? {
+            switch self {
+            case .enabled, .disabled:
+                return nil
+            case .requiresApproval:
+                return "如果没有生效，请到 系统设置 > 通用 > 登录项 检查是否被系统拦截。"
+            case .unavailable:
+                return "请先把应用安装到 /Applications 或 ~/Applications，并从 .app 启动后再开启。"
+            }
+        }
+    }
+
+    func currentState() -> State {
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            return .enabled
+        case .notRegistered:
+            return .disabled
+        case .requiresApproval:
+            return .requiresApproval
+        case .notFound:
+            return .unavailable
+        @unknown default:
+            return .unavailable
+        }
+    }
+
+    func toggle() throws {
+        switch currentState() {
+        case .enabled:
+            try SMAppService.mainApp.unregister()
+        case .disabled, .requiresApproval, .unavailable:
+            try SMAppService.mainApp.register()
+        }
+    }
 }
 
 private final class InputSourceController {
@@ -488,6 +555,7 @@ private final class ShiftTapMonitor {
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let inputController = InputSourceController()
+    private let launchAtLoginController = LaunchAtLoginController()
     private lazy var tapMonitor = ShiftTapMonitor { [weak self] side in
         Task { @MainActor [weak self] in
             self?.switchForTap(side)
@@ -522,6 +590,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     @objc
     private func requestMonitoringPermission(_ sender: NSMenuItem) {
         ensureMonitoringEnabled(requestIfNeeded: true)
+        refreshStatusItem()
+    }
+
+    @objc
+    private func toggleLaunchAtLogin(_ sender: NSMenuItem) {
+        do {
+            try launchAtLoginController.toggle()
+        } catch {
+            presentAlert(
+                title: "无法更新开机自启动",
+                message: error.localizedDescription
+            )
+        }
+
         refreshStatusItem()
     }
 
@@ -577,6 +659,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             menu.addItem(hint)
             menu.addItem(.separator())
         }
+
+        let launchState = launchAtLoginController.currentState()
+        let launchItem = NSMenuItem(title: launchState.title, action: nil, keyEquivalent: "")
+        launchItem.isEnabled = false
+        menu.addItem(launchItem)
+        menu.addItem(makeActionItem(title: launchState.actionTitle, action: #selector(toggleLaunchAtLogin(_:))))
+
+        if let hint = launchState.hint {
+            let hintItem = NSMenuItem(title: hint, action: nil, keyEquivalent: "")
+            hintItem.isEnabled = false
+            menu.addItem(hintItem)
+        }
+
+        menu.addItem(.separator())
 
         let englishTitle = "左 Shift -> \(inputController.selectedSource(for: .english)?.localizedName ?? "未配置")"
         let englishItem = NSMenuItem(title: englishTitle, action: nil, keyEquivalent: "")
@@ -696,6 +792,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
         return item
+    }
+
+    private func presentAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 
     @objc
